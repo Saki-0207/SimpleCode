@@ -1,8 +1,46 @@
-# SimpleCode 使用说明
+# SimpleCode
 
-SimpleCode 是一个**终端里的 AI 编程助手**（Python 实现）。它在命令行里跑一个对话式 Agent：你用自然语言提需求，它能读写文件、执行命令、搜索代码、调用 MCP 工具、派生子代理协作，并带有权限管控、上下文压缩、会话回溯等工程化能力。
+> A terminal-based AI coding assistant written in Python — a conversational agent that reads/writes files, runs commands, searches code, calls MCP tools, and spawns sub-agents, with permission control, context compaction, and session rewind built in. Model-agnostic via OpenAI / Anthropic / OpenAI-compatible providers (DeepSeek, vLLM, Ollama, …).
 
-本机已配置 **DeepSeek `deepseek-v4-pro`** 作为模型后端，并接入了 5 个 MCP 服务器。
+**SimpleCode** 是一个**终端里的 AI 编程助手**（Python 实现）。你在命令行里用自然语言提需求，它就能读写文件、执行命令、搜索代码、调用 MCP 工具、派生子代理协作，并带有权限管控、上下文压缩、会话回溯等工程化能力。模型后端可插拔，兼容 OpenAI / Anthropic / OpenAI-compatible 协议（DeepSeek、vLLM、Ollama 等）。
+
+> ℹ️ 本项目是作者为学习 agentic coding 工具架构而做的 Python 实现，参考了 Claude Code 一类终端 Agent 的设计（子代理、技能、钩子、worktree、MCP 等），用于研究与自用。
+
+### ✨ 特性
+
+- 🗣️ **对话式 Agent**：自然语言驱动的读写文件 / 执行命令 / 代码搜索
+- 🔌 **模型可插拔**：`anthropic` / `openai` / `openai-compat` 三种协议，一份 YAML 切换后端
+- 🛡️ **权限系统**：读 / 写 / 执行分级管控，四种权限模式，可持久化放行规则
+- 🧠 **上下文工程**：自动压缩（compact）、会话回溯（rewind）、跨会话记忆
+- 👥 **子代理与团队**：派生 subagent、Teams 多角色协作
+- 🧩 **可扩展**：MCP 工具、技能（Skills）、钩子（Hooks）、自定义斜杠命令
+- 🌲 **Git Worktree + 沙箱**：隔离工作区与 OS 级命令沙箱
+- 💻 **三种运行形态**：交互式 TUI / 非交互 `-p` / 远程 WebSocket + 浏览器 UI
+
+### 📂 目录结构
+
+```
+simplecode/
+├── app.py            # Textual TUI 主程序
+├── agent.py          # Agent 主循环（对话 / 工具调用 / 恢复）
+├── client.py         # 模型客户端（anthropic / openai / openai-compat）
+├── config.py         # 配置加载与校验
+├── prompts.py        # 系统提示词构建
+├── tools/            # 内置工具（读写/命令/搜索/子代理/任务…）
+├── commands/         # 斜杠命令与处理器
+├── agents/           # 子代理：加载、解析、派生、追踪
+├── teams/            # 多代理团队协作
+├── skills/           # 技能包加载与执行
+├── hooks/            # 生命周期钩子引擎
+├── mcp/              # MCP 客户端与工具封装
+├── memory/           # 记忆与项目指令
+├── permissions/      # 权限规则与检查
+├── context/          # 上下文窗口管理
+├── worktree/         # Git worktree 集成
+└── sandbox/          # 命令沙箱（seatbelt / bwrap）
+```
+
+📖 完整功能与配置说明见下文，或直接看 [`使用说明.md`](使用说明.md)（同内容中文手册）。
 
 ---
 
