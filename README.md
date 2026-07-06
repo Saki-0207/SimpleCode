@@ -1,5 +1,9 @@
 # SimpleCode
 
+[![CI](https://github.com/Saki-0207/SimpleCode/actions/workflows/ci.yml/badge.svg)](https://github.com/Saki-0207/SimpleCode/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
 > A terminal-based AI coding assistant written in Python — a conversational agent that reads/writes files, runs commands, searches code, calls MCP tools, and spawns sub-agents, with permission control, context compaction, and session rewind built in. Model-agnostic via OpenAI / Anthropic / OpenAI-compatible providers (DeepSeek, vLLM, Ollama, …).
 
 **SimpleCode** 是一个**终端里的 AI 编程助手**（Python 实现）。你在命令行里用自然语言提需求，它就能读写文件、执行命令、搜索代码、调用 MCP 工具、派生子代理协作，并带有权限管控、上下文压缩、会话回溯等工程化能力。模型后端可插拔，兼容 OpenAI / Anthropic / OpenAI-compatible 协议（DeepSeek、vLLM、Ollama 等）。
@@ -136,6 +140,27 @@ $env:PYTHONUTF8 = "1"
 ```
 
 > ⚠️ 本机系统默认 `python` 是 Anaconda 3.7（过旧），**必须用 `.venv` 里的 Python**。详见[第 17 节](#17-常见问题本机环境)。
+
+### 运行测试
+
+项目含 **540+ 个单元测试**（覆盖 Agent、权限、上下文、子代理、记忆、MCP、Worktree 等）。测试依赖装在可选依赖组 `dev` 里：
+
+```powershell
+# 安装测试依赖（在已建好的 .venv 中）
+.\.venv\Scripts\python.exe -m pip install ".[dev]"
+
+# 运行全部测试
+$env:PYTHONUTF8 = "1"
+.\.venv\Scripts\python.exe -m pytest -q
+```
+
+```bash
+# macOS / Linux
+.venv/bin/python -m pip install ".[dev]"
+.venv/bin/python -m pytest -q
+```
+
+每次向 `main` 推送时，GitHub Actions 会在 Python 3.11 / 3.12 上自动跑一遍（见页首 CI 徽章）。
 
 ---
 
