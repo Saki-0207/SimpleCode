@@ -1,0 +1,42 @@
+# SimpleCode 配置模板
+# 用法：复制到 .simplecode/config.yaml 后填入自己的 api_key
+#   Windows PowerShell:  New-Item -ItemType Directory -Force .simplecode; Copy-Item config.example.yaml .simplecode/config.yaml
+#   macOS / Linux:       mkdir -p .simplecode && cp config.example.yaml .simplecode/config.yaml
+#
+# 加载顺序（后者覆盖前者）：
+#   ~/.simplecode/config.yaml  →  <项目>/.simplecode/config.yaml  →  <项目>/.simplecode/config.local.yaml
+# 密钥建议放进 config.local.yaml，或用 ${ENV_VAR} 引用环境变量，避免明文提交。
+
+# ── 模型提供方（列表里第一个为默认模型）───────────────────────────────
+providers:
+  - name: deepseek
+    protocol: openai-compat        # anthropic | openai | openai-compat
+    base_url: https://api.deepseek.com
+    api_key: "${DEEPSEEK_API_KEY}"  # 也可直接写 "sk-..."；推荐用环境变量引用
+    model: deepseek-v4-pro
+    context_window: 1000000         # 不写则自动推断
+    max_output_tokens: 32768
+    thinking: false
+
+  # 更快更省的备选模型：去掉注释即可启用（把它挪到列表第一位则成为默认）
+  # - name: deepseek-flash
+  #   protocol: openai-compat
+  #   base_url: https://api.deepseek.com
+  #   api_key: "${DEEPSEEK_API_KEY}"
+  #   model: deepseek-v4-flash
+  #   context_window: 1000000
+  #   max_output_tokens: 32768
+
+# ── 其它顶层配置（均可选，按需取消注释）──────────────────────────────
+permission_mode: default            # default | acceptEdits | plan | bypassPermissions
+
+# mcp_servers: []                   # MCP 服务器，见 README 第 11 节
+# hooks: []                         # 钩子，见 README 第 15 节
+# enable_fork: false
+# enable_verification_agent: false
+# enable_coordinator_mode: false
+# teammate_mode: ""                 # "" 或 "in-process"
+# sandbox:
+#   enabled: false
+#   auto_allow: false
+#   network_enabled: true

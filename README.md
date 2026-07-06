@@ -30,6 +30,52 @@ SimpleCode 是一个**终端里的 AI 编程助手**（Python 实现）。它在
 
 ## 1. 快速开始
 
+### 从零安装（首次 clone 后）
+
+刚 clone 下来时**没有** `.venv` 和 `.simplecode/config.yaml`（都被 `.gitignore` 排除），按下面几步初始化：
+
+**Windows（PowerShell）**
+
+```powershell
+# 1) 克隆
+git clone https://github.com/Saki-0207/SimpleCode.git
+cd SimpleCode
+
+# 2) 用 Python 3.11+ 建虚拟环境（务必是 3.11 及以上）
+py -3.11 -m venv .venv
+
+# 3) 安装本项目及依赖（中文路径下不要用 -e 可编辑安装）
+$env:PYTHONUTF8 = "1"
+.\.venv\Scripts\python.exe -m pip install .
+
+# 4) 复制配置模板并填入 API Key
+New-Item -ItemType Directory -Force .simplecode | Out-Null
+Copy-Item config.example.yaml .simplecode\config.yaml
+notepad .simplecode\config.yaml   # 把 api_key 改成你自己的
+
+# 5) 启动
+.\run-simplecode.bat
+```
+
+**macOS / Linux**
+
+```bash
+git clone https://github.com/Saki-0207/SimpleCode.git
+cd SimpleCode
+
+python3.11 -m venv .venv
+.venv/bin/python -m pip install .
+
+mkdir -p .simplecode && cp config.example.yaml .simplecode/config.yaml
+$EDITOR .simplecode/config.yaml     # 填入 api_key
+
+.venv/bin/python -m simplecode
+```
+
+> **API Key**：`config.example.yaml` 里默认用 `${DEEPSEEK_API_KEY}` 环境变量引用。你可以直接把 `api_key` 改成明文 `"sk-..."`，或设置环境变量后再启动。DeepSeek 之外的模型改 `provider`（`base_url` / `model` / `protocol`）即可，见[第 2 节](#2-配置文件详解)。
+>
+> ⚠️ 路径含中文（如「新建文件夹」）时**不要用 `pip install -e .`**，会触发 `Failed to import site module` / GBK 解码错。用上面的普通安装，并保持 `PYTHONUTF8=1`。彻底解法是放到纯英文路径（如 `C:\dev\SimpleCode`）。详见[第 17 节](#17-常见问题本机环境)。
+
 ### 启动
 
 项目根目录已生成 `run-simplecode.bat`，直接用它启动：
