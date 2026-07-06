@@ -1,0 +1,440 @@
+# SimpleCode 使用说明
+
+SimpleCode 是一个**终端里的 AI 编程助手**（Python 实现）。它在命令行里跑一个对话式 Agent：你用自然语言提需求，它能读写文件、执行命令、搜索代码、调用 MCP 工具、派生子代理协作，并带有权限管控、上下文压缩、会话回溯等工程化能力。
+
+本机已配置 **DeepSeek `deepseek-v4-pro`** 作为模型后端，并接入了 5 个 MCP 服务器。
+
+---
+
+## 目录
+
+1. [快速开始](#1-快速开始)
+2. [配置文件详解](#2-配置文件详解)
+3. [三种运行模式](#3-三种运行模式)
+4. [斜杠命令大全](#4-斜杠命令大全)
+5. [权限系统](#5-权限系统)
+6. [内置工具](#6-内置工具)
+7. [上下文管理](#7-上下文管理)
+8. [会话与回溯](#8-会话与回溯)
+9. [子代理（Subagents）](#9-子代理subagents)
+10. [团队协作（Teams）](#10-团队协作teams)
+11. [MCP 工具扩展](#11-mcp-工具扩展)
+12. [技能（Skills）](#12-技能skills)
+13. [记忆与项目指令](#13-记忆与项目指令)
+14. [自定义斜杠命令](#14-自定义斜杠命令)
+15. [钩子（Hooks）](#15-钩子hooks)
+16. [Git Worktree 与沙箱](#16-git-worktree-与沙箱)
+17. [常见问题（本机环境）](#17-常见问题本机环境)
+
+---
+
+## 1. 快速开始
+
+### 启动
+
+项目根目录已生成 `run-simplecode.bat`，直接用它启动：
+
+```powershell
+# 交互式界面（双击 .bat 文件也可以）
+.\run-simplecode.bat
+
+# 非交互式：跑完一条任务就退出
+.\run-simplecode.bat -p "把 README 翻译成英文"
+```
+
+脚本内部做了三件事：切换控制台到 UTF-8、设置 `PYTHONUTF8=1`、用项目虚拟环境 `.venv` 的 Python 运行。
+
+### 不用脚本时
+
+```powershell
+$env:PYTHONUTF8 = "1"
+& ".venv\Scripts\python.exe" -m simplecode
+```
+
+> ⚠️ 本机系统默认 `python` 是 Anaconda 3.7（过旧），**必须用 `.venv` 里的 Python**。详见[第 17 节](#17-常见问题本机环境)。
+
+---
+
+## 2. 配置文件详解
+
+配置文件是 `.simplecode/config.yaml`。加载顺序（后者覆盖前者）：
+
+1. `~/.simplecode/config.yaml`（用户全局）
+2. `<项目>/.simplecode/config.yaml`（项目级）
+3. `<项目>/.simplecode/config.local.yaml`（本地覆盖，适合放密钥）
+
+### 2.1 模型提供方（providers）
+
+```yaml
+providers:
+  - name: deepseek            # 自定义名称
+    protocol: openai-compat   # 协议：anthropic | openai | openai-compat
+    base_url: https://api.deepseek.com
+    api_key: "sk-..."         # 也可用 ${ENV_VAR} 引用环境变量
+    model: deepseek-v4-pro
+    context_window: 1000000   # 不写则自动推断
+    max_output_tokens: 32768
+    thinking: false           # 是否开启思维链
+```
+
+**三种协议怎么选：**
+
+| protocol | 端点 | 适用 |
+|----------|------|------|
+| `anthropic` | `/v1/messages` | Claude 官方、MiniMax 等 Anthropic 兼容服务 |
+| `openai` | `/responses` | OpenAI 较新的 Responses API |
+| `openai-compat` | `/chat/completions` | **DeepSeek**、vLLM、Ollama、Together 等绝大多数兼容服务 |
+
+列表里的**第一个 provider** 是默认使用的模型。
+
+### 2.2 其它顶层配置项
+
+```yaml
+permission_mode: default          # 启动权限模式，见第 5 节
+mcp_servers: [...]                 # MCP 服务器，见第 11 节
+hooks: [...]                       # 钩子，见第 15 节
+enable_fork: false                # 是否允许子代理 fork 父上下文
+enable_verification_agent: false  # 是否启用内置 Verification 子代理
+enable_coordinator_mode: false    # 团队协调者模式
+teammate_mode: ""                 # "" 或 "in-process"
+worktree: {...}                   # Worktree 配置
+sandbox: {...}                    # 沙箱配置，见第 16 节
+```
+
+---
+
+## 3. 三种运行模式
+
+| 模式 | 命令 | 用途 |
+|------|------|------|
+| **交互式 TUI** | `run-simplecode.bat` | 默认，全功能对话界面 |
+| **非交互式** | `... -m simplecode -p "提示"` | 脚本/自动化，跑完打印结果后退出 |
+| **远程模式** | `... -m simplecode --remote` | 启动 WebSocket 服务（`0.0.0.0:18888`），浏览器访问 `http://localhost:18888` |
+
+非交互式可加 `--output-format stream-json` 输出逐行 NDJSON 事件，便于程序解析。
+非交互式默认自动批准所有权限请求，适合配 `--mode bypassPermissions`。
+
+---
+
+## 4. 斜杠命令大全
+
+在交互界面里输入 `/` 开头的命令。输入 `/help` 查看全部，`/help <命令>` 看单条详情。
+
+| 命令 | 别名 | 说明 |
+|------|------|------|
+| `/help` | `/h` `/?` | 显示帮助 |
+| `/clear` | | 清除对话历史 |
+| `/compact [重点]` | `/c` | 压缩上下文（见[第 7 节](#7-上下文管理)） |
+| `/status` | `/s` | 显示当前状态（模型、token 用量、模式等） |
+| `/plan [任务]` | `/p` | 切换到 Plan 模式（只读规划，不改文件） |
+| `/permission ...` | | 权限管理（见[第 5 节](#5-权限系统)） |
+| `/review [关注点]` | | 让 Agent 审查当前代码变更 |
+| `/memory [list\|clear\|edit]` | | 记忆管理（见[第 13 节](#13-记忆与项目指令)） |
+| `/session [list\|resume\|new\|delete]` | | 会话管理（见[第 8 节](#8-会话与回溯)） |
+| `/rewind [编号]` | | 回到之前的检查点 |
+| `/tasks [info\|cancel] [id]` | | 管理后台任务 |
+| `/trace` | | 查看子代理父子追踪树 |
+| `/mcp` | | 显示 MCP 服务器状态与工具列表 |
+| `/skill list\|info\|reload` | | 管理技能包（见[第 12 节](#12-技能skills)） |
+| `/worktree <子命令>` | `/wt` | 管理 Git Worktree（见[第 16 节](#16-git-worktree-与沙箱)） |
+| `/sandbox [on\|off\|on-auto]` | | 沙箱开关 |
+
+> 此外，`.simplecode/commands/` 里的自定义命令和已加载的技能也会作为斜杠命令出现。
+
+---
+
+## 5. 权限系统
+
+每个工具按类别（`read` 读 / `write` 写 / `command` 执行命令）受权限管控。四种模式：
+
+| 模式 | 读 | 写 | 执行命令 | 适用场景 |
+|------|----|----|---------|---------|
+| `default` | 允许 | **询问** | **询问** | 默认，安全 |
+| `acceptEdits` | 允许 | 允许 | **询问** | 信任改文件、但命令仍确认 |
+| `plan` | 允许 | **询问** | **询问** | 只规划不动手 |
+| `bypassPermissions` | 允许 | 允许 | 允许 | 全自动，**慎用** |
+
+**运行时切换与管理：**
+
+```
+/permission mode acceptEdits   # 切换模式
+/permission rules              # 查看已有规则
+/permission add <规则>          # 添加一条放行/拦截规则
+/permission reset              # 重置
+```
+
+规则文件（持久化）：
+- `~/.simplecode/permissions.yaml`（用户全局）
+- `<项目>/.simplecode/permissions.yaml`（项目级）
+- `<项目>/.simplecode/permissions.local.yaml`（本地）
+
+另外内置**危险命令检测**（如 `rm -rf` 等）和**路径沙箱**（限制写操作在工作目录内），即使在宽松模式下也会拦截明显危险的操作。
+
+---
+
+## 6. 内置工具
+
+Agent 自动按需调用，无需手动触发：
+
+**核心文件/命令工具**
+- **Read** — 读文件（支持图片、PDF、行号）
+- **Write** — 写/覆盖文件
+- **Edit** — 精确字符串替换式编辑
+- **Bash** — 执行 shell 命令
+- **Glob** — 文件名模式匹配（如 `**/*.py`）
+- **Grep** — 基于 ripgrep 的内容搜索
+
+**协作与编排工具**
+- **Agent** — 派生子代理处理子任务（见第 9 节）
+- **TaskCreate / TaskList / TaskGet / TaskUpdate** — 后台任务管理
+- **TeamCreate / TeamDelete** — 创建/解散协作团队（见第 10 节）
+- **SendMessage** — 给已有代理/团队成员发消息
+- **AskUser** — 反问用户以澄清需求
+- **LoadSkill** — 加载技能包
+- **ToolSearch** — 按需检索"延迟加载"的工具（MCP 工具就是这样被发现的）
+- **EnterWorktree / ExitWorktree** — 进入/退出 Git worktree
+- **ExitPlanMode** — 退出 Plan 模式开始执行
+
+MCP 服务器的工具会以 `mcp_<服务器名>_<工具名>` 形式注册进来。
+
+---
+
+## 7. 上下文管理
+
+模型上下文有限（DeepSeek v4-pro 为 1M token）。当对话变长：
+
+- **自动压缩**：接近上限时自动总结较早的内容，保留要点，无需手动干预。
+- **手动压缩**：`/compact` 立即压缩；`/compact 保留 X 的细节` 可指定重点。
+- **清空**：`/clear` 完全清除对话历史，重新开始。
+
+`/status` 可随时查看当前 token 用量与剩余空间。
+
+---
+
+## 8. 会话与回溯
+
+**会话（Session）** —— 对话会被持久化，可随时恢复：
+
+```
+/session list           # 列出历史会话
+/session resume <id>    # 恢复某个会话
+/session new            # 开新会话
+/session delete <id>    # 删除
+```
+
+**回溯（Rewind）** —— Agent 在改文件前会打**检查点**，可回退：
+
+```
+/rewind                 # 查看可回退的检查点
+/rewind <编号>           # 回到指定检查点（撤销之后的改动）
+```
+
+---
+
+## 9. 子代理（Subagents）
+
+主 Agent 可以通过 **Agent 工具**派生子代理来分担复杂/可并行的任务，子代理有独立上下文，跑完把结论汇报回来。`/trace` 可查看父子调用树。
+
+**自定义子代理**：在以下目录放 `.md` 文件定义（frontmatter + 系统提示词）：
+- `.simplecode/agents/`（项目级，优先）
+- `~/.simplecode/agents/`（用户级）
+
+定义文件 frontmatter 支持字段：
+
+```markdown
+---
+name: my-reviewer
+description: 什么时候该用这个子代理
+tools: [Read, Grep, Bash]      # 可用工具白名单（省略=全部）
+disallowedTools: []
+model: inherit                 # 或具体模型 id
+maxTurns: 200
+permissionMode: default
+background: false              # 是否后台运行
+---
+
+这里写子代理的系统提示词……
+```
+
+`enable_fork: true` 时，子代理可继承父对话上下文（fork 模式）。
+
+---
+
+## 10. 团队协作（Teams）
+
+比子代理更进一步的多代理编排：通过 **TeamCreate / TeamDelete 工具**创建一组代理协同完成任务，成员间用 **SendMessage** 通信。相关配置：
+
+```yaml
+teammate_mode: in-process       # 进程内多代理
+enable_coordinator_mode: true   # 启用协调者（lead）模式
+```
+
+团队成员可结合 Git Worktree（见第 16 节）各自在隔离副本上工作，互不干扰。
+
+---
+
+## 11. MCP 工具扩展
+
+MCP（Model Context Protocol）让 Agent 接入外部工具/数据源。在 `.simplecode/config.yaml` 的 `mcp_servers:` 声明。
+
+### 已配置的 5 个服务器
+
+| 服务器 | 工具数 | 用途 |
+|--------|-------|------|
+| context7 | 2 | 查最新第三方库文档 |
+| filesystem | 14 | 在白名单目录内读写文件 |
+| fetch | 1 | 抓取网页并转成文本 |
+| memory | 9 | 知识图谱式持久记忆 |
+| github | 26 | 仓库/Issue/PR 操作（需 token） |
+
+### 两种传输方式
+
+```yaml
+mcp_servers:
+  # 本地 stdio：启动一个子进程
+  - name: filesystem
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-filesystem", "C:\\项目目录"]
+    env:
+      SOME_VAR: "${SOME_VAR}"     # ${} 从系统环境变量取值，避免明文密钥
+
+  # 远程 HTTP（Streamable HTTP）
+  - name: my-remote
+    url: "https://api.example.com/mcp"
+    headers:
+      Authorization: "Bearer ${TOKEN}"
+```
+
+规则：每个服务器 `command` 和 `url` **二选一**；某个服务器连不上不影响其它。改完需**重启**。运行时用 `/mcp` 查看状态。
+
+> GitHub 服务器需先设环境变量：
+> ```powershell
+> [Environment]::SetEnvironmentVariable("GITHUB_PERSONAL_ACCESS_TOKEN", "ghp_xxx", "User")
+> ```
+> 设完重开终端再启动。
+
+---
+
+## 12. 技能（Skills）
+
+技能是**可复用的能力包**（一段专门的指令 + 可选脚本/资源），按需加载，避免一直占用上下文。
+
+```
+/skill list            # 列出可用技能
+/skill info <name>     # 查看某技能详情
+/skill reload          # 重新扫描技能目录
+```
+
+**自定义技能**目录：
+- `.simplecode/skills/`（项目级）
+- `~/.simplecode/skills/`（用户级）
+
+每个技能是一个含 `SKILL.md`（描述 + 触发条件 + 指令）的子目录。已加载的技能也会作为斜杠命令出现。
+
+---
+
+## 13. 记忆与项目指令
+
+### 项目指令文件（每次启动自动加载）
+
+按以下顺序加载并合并，用来给 Agent 长期的项目背景/规范：
+
+1. `~/.simplecode/SIMPLECODE.md`、`~/.simplecode/AGENTS.md`（用户全局）
+2. 从 git 根到工作目录每层的 `SIMPLECODE.md` / `AGENTS.md`（项目级）
+3. `.simplecode/INSTRUCTIONS.md`（遗留格式）
+4. `SIMPLECODE.local.md`（本地覆盖，不提交）
+
+> 这些文件支持 `@./path`、`@~/path` 等 **@include 指令**，可拆分引用其它文件。
+
+本项目根目录已有一个 `SIMPLECODE.md`，你可以在里面写技术栈、代码规范等约定。
+
+### 运行时记忆
+
+```
+/memory list    # 查看已记住的内容
+/memory edit    # 编辑
+/memory clear   # 清空
+```
+
+---
+
+## 14. 自定义斜杠命令
+
+在 `.simplecode/commands/` 下放 `.md` 文件，文件名即命令名（子目录用冒号命名空间，如 `git/log.md` → `/git:log`）。
+
+```markdown
+---
+description: 生成符合规范的提交信息
+argument-hint: "[范围]"
+aliases: [cm]
+---
+
+请阅读当前 git diff，生成一条符合 Conventional Commits 规范的提交信息。
+关注范围：$ARGUMENTS
+```
+
+- `$ARGUMENTS` 会被替换为用户在命令后输入的参数。
+- 没有 `$ARGUMENTS` 占位符时，用户输入会作为"## User Request"追加到正文末尾。
+- 搜索路径：`~/.simplecode/commands/`（全局）→ `<项目>/.simplecode/commands/`（项目级，覆盖全局）。
+
+---
+
+## 15. 钩子（Hooks）
+
+在 `config.yaml` 的 `hooks:` 段声明，可在工具调用前后、特定事件时执行自定义脚本（例如：写文件后自动格式化、执行前做安全校验、阻止某类操作）。属于进阶能力，按需配置。
+
+---
+
+## 16. Git Worktree 与沙箱
+
+### Worktree
+
+让 Agent（尤其是团队/子代理）在 Git worktree 隔离副本上工作，互不干扰：
+
+```
+/worktree create     # 创建
+/worktree list       # 列出
+/worktree enter      # 进入
+/worktree exit       # 退出
+/worktree status     # 状态
+```
+
+配置项（`config.yaml` 的 `worktree:`）可设置自动软链的目录（如 `node_modules`、`.venv`）和过期清理策略。
+
+### 沙箱
+
+OS 级命令沙箱，限制命令的文件/网络访问：
+
+```
+/sandbox on        # 开启
+/sandbox on-auto   # 开启并自动放行（沙箱兜底）
+/sandbox off       # 关闭
+```
+
+配置（`config.yaml` 的 `sandbox:`）：`enabled`、`auto_allow`、`network_enabled`。
+
+---
+
+## 17. 常见问题（本机环境）
+
+**Q: 为什么必须用 `.venv` 里的 Python？**
+系统默认 `python` 是 Anaconda 3.7，而项目要求 ≥3.11。已用 `python3.11` 建好 `.venv` 并装好全部依赖，启动脚本默认就用它。
+
+**Q: 报 `Failed to import site module` / GBK 解码错？**
+因为项目路径含中文「新建文件夹」。解决：① 已删除 editable 安装产生的坏 `.pth`，改为从源码目录直接运行；② 启动时设 `PYTHONUTF8=1`（`run-simplecode.bat` 已自动设置）。**不要再用 `pip install -e .`**。彻底解法是把项目移到纯英文路径（如 `C:\dev\simplecode`）。
+
+**Q: 中文显示乱码？**
+确保用了 `run-simplecode.bat`（内部 `chcp 65001` + `PYTHONUTF8=1`）。
+
+**Q: 想换更便宜的模型？**
+`config.yaml` 里有 `deepseek-v4-flash` 的注释模板，启用它即可（同样 1M 上下文，更快更省）。
+
+**Q: fetch 工具失效？**
+fetch 是 Python 版 MCP 服务器，装在 `.venv` 里、配置中用了 venv 的 python 绝对路径。**移动项目位置后需同步改这个路径。**
+
+**Q: API Key 安全？**
+当前 key 明文写在 `config.yaml`。`.gitignore` 已忽略该文件，不会进 git。更稳妥的做法是改用 `${DEEPSEEK_KEY}` 环境变量引用，或放进 `config.local.yaml`。
+
+---
+
+*本说明基于当前项目代码生成。功能以实际版本为准，`/help` 查看最新命令列表。*
